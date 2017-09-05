@@ -5,20 +5,25 @@
 #include <ctype.h>
 
 void hmm_train(int M, int N, int T, int *O, int max_iter);
-void initialization(int M, int N);
-int *initObservation(int T);
+void init_model(int M, int N);
 void dump_model(int M, int N);
 double **alpha_pass(int N, int T, int *O);
+double **alpha_pass_no_scale(int N, int T, int *O);
 double **beta_pass(int N, int T, int *O);
 double ***compute_gamma(int N, int T, int *O, double **alpha, double **beta, double ***gamma);
 void re_estimate(int N, int M, int T, int *O, double **gamma, double ***di_gamma);
 double compute_prob(int T);
-void initBrownCorpus();
+void init_brown_corpus(int T);
+void init_simple_corpus(int T);
+double get_all_states_prob_sum(int N, int T, int *O, int i, int t, double prev_prob);
+double get_all_observations_prob_sum(int M, int N, int T, int t, int *O, int use_alpha_pass);
+int verify_all_prob_is_valid(int M, int N, int T, int *O);
 
-double** A = NULL;
-double** B = NULL;
-double* pi = NULL;
+double **A = NULL;
+double **B = NULL;
+double *pi = NULL;
 
+int *O = NULL;
 double *C = NULL;
 
 void dump_model(int M, int N) {
@@ -48,37 +53,24 @@ void dump_model(int M, int N) {
     printf("\n");
 }
 
-int *initObservation(int T) {
-    // Modify here to change observation
-    char * line = NULL;
-    size_t len = 0;
-    FILE *fp = fopen("brown.txt", "r");
-    if (fp == NULL)
-        exit(EXIT_FAILURE);
+void init_simple_corpus(int T) {
+    if (T != 4) {fprintf(stderr, "ERROR: wrong T value."); exit(1);};
 
-    ssize_t read;
-    int count = 0;
-    int *O = (int *)malloc(sizeof(int) * T);
-    while ((read = getline(&line, &len, fp)) != -1)
-    {
-        for (int i = 0; i < len; i++) {
-            char c = line[i];
-            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == ' ') {
-                if (c != ' ') O[count] = tolower(c) - 'a';
-                else O[count] = 26;
-                count++;
-            }
-            if (count >= T) break;
-        }
-        if (count >= T) break;
-    }
-    if (count < T) exit(0);
+    A[0][0] = 0.7; A[0][1] = 0.3;
+    A[1][0] = 0.4; A[1][1] = 0.6;
 
-    return O;
+    B[0][0] = 0.1; B[0][1] = 0.4; B[0][2] = 0.5;
+    B[1][0] = 0.7; B[1][1] = 0.2; B[1][2] = 0.1;
+
+    pi[0] = 0.6; pi[1] = 0.4;
+
+    O = (int *)malloc(sizeof(int) * T);
+    O[0] = 0; O[1] = 1;
+    O[2] = 0; O[3] = 2;
 }
 
-void initBrownCorpus() {
-    A[0][1] = 0.47468;
+void init_brown_corpus(int T) {
+    A[0][0] = 0.47468;
     A[0][1] = 0.52532;
     A[1][0] = 0.51656;
     A[1][1] = 0.48344;
@@ -113,23 +105,106 @@ void initBrownCorpus() {
 
     pi[0] = 0.51316;
     pi[1] = 0.48484;
+
+    // init observations
+    O = (int *)malloc(sizeof(int) * T);
+
+    char * line = NULL;
+    size_t len = 0;
+    FILE *fp = fopen("./dataset/brown.txt", "r");
+    if (fp == NULL) {fprintf(stderr, "ERROR: Couldn't open file.\n"); exit(1);};
+
+    ssize_t read;
+    int count = 0;
+    while ((read = getline(&line, &len, fp)) != -1){
+        for (int i = 0; i < len; i++) {
+            char c = line[i];
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == ' ') {
+                if (c != ' ') O[count] = tolower(c) - 'a';
+                else O[count] = 26;
+                count++;
+            }
+            if (count >= T) break;
+        }
+        if (count >= T) break;
+    }
+    if (count < T) exit(0);    
+}
+
+double get_all_states_prob_sum(int N, int T, int *O, int i, int t, double prev_prob) {
+    if (t >= T) {
+        return prev_prob;
+    }
+
+    double prob = 0.0;
+    double curr_prob = 0.0;
+    for (int j = 0; j < N; j++) {
+        if (t == 0) curr_prob = pi[j] * B[j][O[t]];
+        else curr_prob = prev_prob * (A[i][j] * B[j][O[t]]);
+
+        prob += get_all_states_prob_sum(N, T, O, j, t + 1, curr_prob);
+
+        curr_prob = prev_prob;
+    }
+    return prob;
+}
+
+double get_all_observations_prob_sum(int M, int N, int T, int t, int *O, int use_alpha_pass) {
+    if (t >= T) {
+        double sum = 0.0;
+        if (use_alpha_pass) {
+            double **alpha = alpha_pass_no_scale(N, T, O);
+            for (int i = 0; i < N; i++) sum += alpha[i][T - 1];
+            if (alpha) {
+                for (int i = 0; i < N; i++) free(alpha[i]);
+                free(alpha);
+            }
+        } else {
+            sum = get_all_states_prob_sum(N, T, O, 0, 0, 1.0);
+        }
+        return sum;
+    }
+
+    double sum = 0.0;
+    for (int i = 0; i < M; i++) {
+        O[t] = i;
+        sum += get_all_observations_prob_sum(M, N, T, t + 1, O, use_alpha_pass);
+    }
+    return sum;
+}
+
+int verify_all_prob_is_valid(int M, int N, int T, int *O) {
+    // verify all probability are sum to one
+    // method 1: using original method
+    double sum1 = get_all_observations_prob_sum(M, N, T, 0, O, 0);
+    // method 2: using alpha-pass
+    double sum2 = get_all_observations_prob_sum(M, N, T, 0, O, 1);
+
+    return (fabs(sum1 - 1.0) < 10e-7) && (fabs(sum2 - 1.0) < 10e-7);
 }
 
 int main(int argc, char *argv[]) {
 
     const int M = 27;
-    const int N = 26;
+    const int N = 2;
     const int T = 50000;
-    const int max_iter = 200;
-    int *O = initObservation(T);
-    initialization(M, N);
-    initBrownCorpus();
+    const int max_iter = 100;
+    init_model(M, N);
+    
+    // init_simple_corpus(T);
+    init_brown_corpus(T);
     hmm_train(M, N, T, O, max_iter);
 
-    free(A);
-    free(B);
-    free(pi);
-    free(O);
+    if (A) {
+        for (int i = 0; i < N; i++) free(A[i]);
+        free(A);
+    }
+    if (B) {
+        for (int i = 0; i < N; i++) free(B[i]);
+        free(B);
+    }
+    if (pi) free(pi);
+    if (O) free(O);
     return 0;
 }
 
@@ -139,11 +214,11 @@ void hmm_train(int M, int N, int T, int* O, int max_iter) {
     for (int i = 0; i < N; i++) {
         double sum = 0.0;
         for (int j = 0; j < M; j++) sum += B[i][j];
-        if (sum != 1.0) { fprintf(stderr, "ERROR: B matrix is not stochastic\n"); exit(1); };
+        if (fabs(sum - 1.0) > 10e-7) { fprintf(stderr, "ERROR: B matrix is not stochastic (%f)\n", sum); exit(1); };
 
         sum = 0.0;
         for (int j = 0; j < N; j++) sum += A[i][j];
-        if (sum != 1.0) { fprintf(stderr, "ERROR: A matrix is not stochastic\n"); exit(1); };
+        if (fabs(sum - 1.0) > 10e-7) { fprintf(stderr, "ERROR: A matrix is not stochastic (%f)\n", sum); exit(1); };
     }
 
     dump_model(M, N);
@@ -194,18 +269,17 @@ void hmm_train(int M, int N, int T, int* O, int max_iter) {
     dump_model(M, N);
 }
 
-void initialization(int M, int N) {
+void init_model(int M, int N) {
     // A: NxN
     // B: NxM
     // pi: 1xN
     // Default is initializing to a nearly uniform distribution
-
     // buffer allocation
     A = (double **)malloc(sizeof(double*) * N);
     for (int i = 0; i < N; i++) A[i] = (double *)malloc(sizeof(double) * N);
 
     B = (double **)malloc(sizeof(double *) * N);
-    for (int i = 0; i < M; i++) B[i] = (double *)malloc(sizeof(double) * M);
+    for (int i = 0; i < N; i++) B[i] = (double *)malloc(sizeof(double) * M);
 
     pi = (double *)malloc(sizeof(double *) * N);
 
@@ -231,6 +305,28 @@ void initialization(int M, int N) {
     for (int i = 0; i < N - 1; i++) pi[N - 1] -= pi[i];
 
     return;
+}
+
+double **alpha_pass_no_scale(int N, int T, int *O) {
+    // alpha is NxT
+    double **alpha = (double **)malloc(sizeof(double *) * N);
+    for (int i = 0; i < N; i++) alpha[i] = (double *)malloc(sizeof(double) * T);
+
+    C = (double *)malloc(sizeof(double) * T);
+
+    // compute alpha-pass
+    for (int i = 0; i < N; i++) alpha[i][0] = pi[i] * B[i][O[0]];
+
+    // compute alpha_t(i)
+    for (int t = 1; t < T; t++) {
+        for (int i = 0; i < N; i++) {
+            alpha[i][t] = 0;
+            for (int j = 0; j < N; j++) alpha[i][t] += (alpha[j][t - 1] * A[j][i]);
+            alpha[i][t] *= B[i][O[t]];
+        }
+    }
+
+    return alpha;
 }
 
 double **alpha_pass(int N, int T, int *O) {
