@@ -4,6 +4,8 @@
 #include "math.h"
 #include <ctype.h>
 
+#include "mycipher.h"
+
 void hmm_train(int M, int N, int T, int *O, int max_iter);
 void init_model(int M, int N);
 void dump_model(int M, int N);
@@ -37,11 +39,11 @@ void dump_model(int M, int N) {
     }
 
     printf("\n--------B-Matrix--------\n");
-    for (int i = 0; i < N; i++) {
-        // if (i < M - 1) printf("    %c | ", i + 'a');
+    for (int i = 0; i < M; i++) {
+        if (i < M) printf("    %c | ", i + 'a');
         // else printf("space | ");
-        for (int j = 0; j < M; j++) {
-            printf("%f ", B[i][j]);
+        for (int j = 0; j < N; j++) {
+            printf("%f ", B[j][i]);
         }
         printf("\n");
     }
@@ -131,6 +133,15 @@ void init_brown_corpus(int T) {
     if (count < T) exit(0);    
 }
 
+void init_ss_cipher_corpus(int T) {
+    int cipher_length = 0;
+    char *cipher = gen_cipher_with_shifting(&cipher_length);
+    if (T != cipher_length) {fprintf(stderr, "ERROR: Wrong size of T %d.\n", cipher_length); exit(0);};
+    O = (int *)malloc(sizeof(int) * T);
+    for (int i = 0; i < cipher_length; i++) O[i] = cipher[i] - 'a';
+    free(cipher);        
+}
+
 double get_all_states_prob_sum(int N, int T, int *O, int i, int t, double prev_prob) {
     if (t >= T) {
         return prev_prob;
@@ -184,15 +195,15 @@ int verify_all_prob_is_valid(int M, int N, int T, int *O) {
 }
 
 int main(int argc, char *argv[]) {
-
-    const int M = 27;
+    const int M = 26;
     const int N = 2;
     const int T = 50000;
-    const int max_iter = 100;
+    const int max_iter = 1000;
     init_model(M, N);
     
+    init_ss_cipher_corpus(T);
     // init_simple_corpus(T);
-    init_brown_corpus(T);
+    // init_brown_corpus(T);
     hmm_train(M, N, T, O, max_iter);
 
     if (A) {
@@ -284,22 +295,29 @@ void init_model(int M, int N) {
     pi = (double *)malloc(sizeof(double *) * N);
 
     // initialize value (nearly uniform distribution)
+    srand(1);
     for (int i = 0; i < N; i++) {
         double sum = 0.0;
         for (int j = 0; j < N - 1; j++) {
-            A[i][j] = 1.0 / N - 0.001 * (j + 1) * (i + 1);
+            float r = (rand() % 100) / 100000.f;
+            if (j % 2 == 0) A[i][j] = (1.0 / N) - r;
+            else A[i][j] = (1.0 / N) + r;
             sum += A[i][j];
         }
         A[i][N - 1] = 1.0 - sum;
 
         sum = 0.0;
         for (int j = 0; j < M - 1; j++) {
-            B[i][j] = 1.0 / M - 0.001 * (j + 1) * (i + 1);
+            float r = (rand() % 100) / 100000.f;
+            if (j % 2 == 0) B[i][j] = (1.0 / M) - r;
+            else B[i][j] = (1.0 / M) + r;
             sum += B[i][j];
         }
         B[i][M - 1] = 1.0 - sum;
 
-        pi[i] = 1.0 / N - 0.001 * (i + 1);
+        float r = (rand() % 100) / 100000.f;
+        if (i % 2 == 0) pi[i] = (1.0 / N) - r;
+        else pi[i] = (1.0 / N) - r;
     }
     pi[N - 1] = 1.0;
     for (int i = 0; i < N - 1; i++) pi[N - 1] -= pi[i];
