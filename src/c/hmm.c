@@ -178,8 +178,14 @@ int main(int argc, char *argv[]) {
     init_model(M, N);
     
     // init_ss_cipher_corpus(T);
+    // Config: M = 26, N = 26, T = 1000
+
     // init_simple_corpus(T);
+    // Config: M = 3, N = 2, T = 4
+
     init_brown_corpus(T);
+    // Config: M = 27, N = 2~, T = 50000, max_iter = 500
+
     hmm_train(M, N, T, O, max_iter);
 
     if (A) {
