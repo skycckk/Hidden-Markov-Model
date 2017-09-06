@@ -113,8 +113,8 @@ void init_brown_corpus(int T) {
 
     char * line = NULL;
     size_t len = 0;
-    FILE *fp = fopen("./dataset/brown.txt", "r");
-    if (fp == NULL) {fprintf(stderr, "ERROR: Couldn't open file.\n"); exit(1);};
+    FILE *fp = fopen("../dataset/brown.txt", "r");
+    if (fp == NULL) {fprintf(stderr, "ERROR: Couldn't open file (brown.txt).\n"); exit(1);};
 
     ssize_t read;
     int count = 0;
@@ -195,27 +195,32 @@ int verify_all_prob_is_valid(int M, int N, int T, int *O) {
 }
 
 int main(int argc, char *argv[]) {
-    const int M = 26;
-    const int N = 2;
-    const int T = 50000;
-    const int max_iter = 1000;
+    if (argc < 5) {
+        fprintf(stderr, "[Usage]: M N T MaxIteration\n");
+        exit(1);
+    }
+    const int M = atoi(argv[1]);
+    const int N = atoi(argv[2]);
+    const int T = atoi(argv[3]);
+    const int max_iter = atoi(argv[4]);
+
     init_model(M, N);
     
-    init_ss_cipher_corpus(T);
+    // init_ss_cipher_corpus(T);
     // init_simple_corpus(T);
-    // init_brown_corpus(T);
+    init_brown_corpus(T);
     hmm_train(M, N, T, O, max_iter);
 
     if (A) {
         for (int i = 0; i < N; i++) free(A[i]);
-        free(A);
+        free(A); A = NULL;
     }
     if (B) {
         for (int i = 0; i < N; i++) free(B[i]);
-        free(B);
+        free(B); B = NULL;
     }
-    if (pi) free(pi);
-    if (O) free(O);
+    if (pi) {free(pi); pi = NULL;}
+    if (O) {free(O); O = NULL;}
     return 0;
 }
 
