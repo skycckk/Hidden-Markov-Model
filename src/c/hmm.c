@@ -28,6 +28,8 @@ double *pi = NULL;
 int *O = NULL;
 double *C = NULL;
 
+int g_random_seed = 0;
+
 void dump_model(int M, int N) {
     // dump A-matrix
     printf("\n--------A-Matrix--------\n");
@@ -160,13 +162,18 @@ int verify_all_prob_is_valid(int M, int N, int T, int *O) {
 
 int main(int argc, char *argv[]) {
     if (argc < 5) {
-        fprintf(stderr, "[Usage]: M N T MaxIteration\n");
+        fprintf(stderr, "[Usage]: M N T MaxIteration seed(optional)\n");
         exit(1);
     }
+
     const int M = atoi(argv[1]);
     const int N = atoi(argv[2]);
     const int T = atoi(argv[3]);
     const int max_iter = atoi(argv[4]);
+    g_random_seed = time(NULL);
+    if (argc > 5) {
+        g_random_seed = atoi(argv[5]);
+    }
 
     init_model(M, N);
     
@@ -266,7 +273,7 @@ void init_model(int M, int N) {
     pi = (double *)malloc(sizeof(double *) * N);
 
     // initialize value (nearly uniform distribution)
-    srand(1);
+    srand(g_random_seed);
     for (int i = 0; i < N; i++) {
         double sum = 0.0;
         for (int j = 0; j < N - 1; j++) {
