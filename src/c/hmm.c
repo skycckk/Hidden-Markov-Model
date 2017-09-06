@@ -216,8 +216,10 @@ void hmm_train(int M, int N, int T, int* O, int max_iter) {
         old_prob = new_prob;
         iteration++;
 
-        printf("----------------\n");
-        printf("iter: %d, prob: %f\n", iteration, new_prob);
+        if ((iteration % (int)(max_iter / 10.f)) == 0) {
+            printf("----------------\n");
+            printf("iter: %d(%.0f%%), prob: %f\n", iteration, iteration * 100.f / (float)max_iter, new_prob);
+        }
         // free memory
         if (alpha) {
             for (int i = 0; i < N; i++) free(alpha[i]);
