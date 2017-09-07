@@ -13,11 +13,11 @@
 void hmm_train(int M, int N, int T, int *O, int max_iter);
 void init_model(int M, int N);
 void dump_model(int M, int N);
-double **alpha_pass(int N, int T, int *O);
-double **alpha_pass_no_scale(int N, int T, int *O);
-double **beta_pass(int N, int T, int *O);
-double ***compute_gamma(int N, int T, int *O, double **alpha, double **beta, double ***gamma);
-void re_estimate(int N, int M, int T, int *O, double **gamma, double ***di_gamma);
+void alpha_pass(int N, int T, int *O);
+void alpha_pass_no_scale(int N, int T, int *O);
+void beta_pass(int N, int T, int *O);
+void compute_gamma(int N, int T, int *O);
+void re_estimate(int N, int M, int T, int *O);
 double compute_prob(int T);
 void init_brown_corpus(int T);
 void init_simple_corpus(int T);
@@ -31,6 +31,11 @@ double *pi = NULL;
 
 int *O = NULL;
 double *C = NULL;
+
+double **alpha = NULL;
+double **beta = NULL;
+double **gamma_t = NULL;
+double ***di_gamma = NULL;
 
 int g_random_seed = 0;
 
@@ -134,7 +139,7 @@ double get_all_observations_prob_sum(int M, int N, int T, int t, int *O, int use
     if (t >= T) {
         double sum = 0.0;
         if (use_alpha_pass) {
-            double **alpha = alpha_pass_no_scale(N, T, O);
+            alpha_pass_no_scale(N, T, O);
             for (int i = 0; i < N; i++) sum += alpha[i][T - 1];
             if (alpha) {
                 for (int i = 0; i < N; i++) free(alpha[i]);
@@ -164,6 +169,46 @@ int verify_all_prob_is_valid(int M, int N, int T, int *O) {
     return (fabs(sum1 - 1.0) < 10e-7) && (fabs(sum2 - 1.0) < 10e-7);
 }
 
+void free_global_memory(int N) {
+    if (A) {
+        for (int i = 0; i < N; i++) free(A[i]);
+        free(A); A = NULL;
+    }
+    if (B) {
+        for (int i = 0; i < N; i++) free(B[i]);
+        free(B); B = NULL;
+    }
+    if (pi) {free(pi); pi = NULL;}
+    if (O) {free(O); O = NULL;}
+    if (C) {free(C); C = NULL;}
+
+    // free memory
+    if (alpha) {
+        for (int i = 0; i < N; i++) free(alpha[i]);
+        free(alpha);
+    }
+
+    if (beta) {
+        for (int i = 0; i < N; i++) free(beta[i]);
+        free(beta);
+    }
+
+    if (gamma_t) {
+        for (int i = 0; i < N; i++) free(gamma_t[i]);
+        free(gamma_t);   
+    }
+
+    if (di_gamma) {
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < N; j++) {
+                free(di_gamma[i][j]);
+            }
+            free(di_gamma[i]);
+        }
+        free(di_gamma);
+    } 
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 5) {
         fprintf(stderr, "[Usage]: M N T MaxIteration seed(optional)\n");
@@ -191,17 +236,8 @@ int main(int argc, char *argv[]) {
     // Config: M = 27, N = 2~, T = 50000, max_iter = 500
 
     hmm_train(M, N, T, O, max_iter);
+    free_global_memory(N);
 
-    if (A) {
-        for (int i = 0; i < N; i++) free(A[i]);
-        free(A); A = NULL;
-    }
-    if (B) {
-        for (int i = 0; i < N; i++) free(B[i]);
-        free(B); B = NULL;
-    }
-    if (pi) {free(pi); pi = NULL;}
-    if (O) {free(O); O = NULL;}
     return 0;
 }
 
@@ -224,11 +260,10 @@ void hmm_train(int M, int N, int T, int* O, int max_iter) {
     double new_prob = 1.0;
     int iteration = 0;
     while (iteration < max_iter && new_prob > old_prob) {
-        double **alpha = alpha_pass(N, T, O);
-        double **beta = beta_pass(N, T, O);
-        double **gamma = NULL;
-        double ***di_gamma = compute_gamma(N, T, O, alpha, beta, &gamma);
-        re_estimate(N, M, T, O, gamma, di_gamma);
+        alpha_pass(N, T, O);
+        beta_pass(N, T, O);
+        compute_gamma(N, T, O);
+        re_estimate(N, M, T, O);
         double new_prob = compute_prob(T);        
         old_prob = new_prob;
         iteration++;
@@ -237,33 +272,6 @@ void hmm_train(int M, int N, int T, int* O, int max_iter) {
             printf("----------------\n");
             printf("iter: %d(%.0f%%), prob: %f\n", iteration, iteration * 100.f / (float)max_iter, new_prob);
         }
-        // free memory
-        if (alpha) {
-            for (int i = 0; i < N; i++) free(alpha[i]);
-            free(alpha);
-        }
-
-        if (beta) {
-            for (int i = 0; i < N; i++) free(beta[i]);
-            free(beta);
-        }
-
-        if (gamma) {
-            for (int i = 0; i < N; i++) free(gamma[i]);
-            free(gamma);   
-        }
-
-        if (di_gamma) {
-            for (int i = 0; i < N; i++) {
-                for (int j = 0; j < N; j++) {
-                    free(di_gamma[i][j]);
-                }
-                free(di_gamma[i]);
-            }
-            free(di_gamma);
-        }
-
-        free(C);
     }
     dump_model(M, N);
 }
@@ -313,12 +321,14 @@ void init_model(int M, int N) {
     return;
 }
 
-double **alpha_pass_no_scale(int N, int T, int *O) {
+void alpha_pass_no_scale(int N, int T, int *O) {
     // alpha is NxT
-    double **alpha = (double **)malloc(sizeof(double *) * N);
-    for (int i = 0; i < N; i++) alpha[i] = (double *)malloc(sizeof(double) * T);
+    if (!alpha) {
+        alpha = (double **)malloc(sizeof(double *) * N);
+        for (int i = 0; i < N; i++) alpha[i] = (double *)malloc(sizeof(double) * T);
+    }
 
-    C = (double *)malloc(sizeof(double) * T);
+    if (!C) C = (double *)malloc(sizeof(double) * T);
 
     // compute alpha-pass
     for (int i = 0; i < N; i++) alpha[i][0] = pi[i] * B[i][O[0]];
@@ -331,16 +341,16 @@ double **alpha_pass_no_scale(int N, int T, int *O) {
             alpha[i][t] *= B[i][O[t]];
         }
     }
-
-    return alpha;
 }
 
-double **alpha_pass(int N, int T, int *O) {
+void alpha_pass(int N, int T, int *O) {
     // alpha is NxT
-    double **alpha = (double **)malloc(sizeof(double *) * N);
-    for (int i = 0; i < N; i++) alpha[i] = (double *)malloc(sizeof(double) * T);
+    if (!alpha) {
+        alpha = (double **)malloc(sizeof(double *) * N);
+        for (int i = 0; i < N; i++) alpha[i] = (double *)malloc(sizeof(double) * T);
+    }
 
-    C = (double *)malloc(sizeof(double) * T);
+    if (!C) C = (double *)malloc(sizeof(double) * T);
 
     // compute alpha-pass
     C[0] = 0.0;
@@ -373,14 +383,14 @@ double **alpha_pass(int N, int T, int *O) {
             alpha[i][t] *= C[t];
         }
     }
-
-    return alpha;
 }
 
-double **beta_pass(int N, int T, int *O) {
+void beta_pass(int N, int T, int *O) {
     // beta is NxT
-    double **beta = (double **)malloc(sizeof(double *) * N);
-    for (int i = 0; i < N; i++) beta[i] = (double *)malloc(sizeof(double) * T);
+    if (!beta) {
+        beta = (double **)malloc(sizeof(double *) * N);
+        for (int i = 0; i < N; i++) beta[i] = (double *)malloc(sizeof(double) * T);
+    }
 
     for (int i = 0; i < N; i++) {
         beta[i][T - 1] = C[T - 1];
@@ -397,21 +407,22 @@ double **beta_pass(int N, int T, int *O) {
             beta[i][t] *= C[t];
         }
     }
-
-    return beta;
 }
 
-double ***compute_gamma(int N, int T, int *O, double **alpha, double **beta, double ***gamma) {
-
+void compute_gamma(int N, int T, int *O) {
     // gamma: NxT
-    *gamma = (double **)malloc(sizeof(double *) * N);
-    for (int i = 0; i < N; i++) (*gamma)[i] = (double *)malloc(sizeof(double) * T);
+    if (!gamma_t) {
+        gamma_t = (double **)malloc(sizeof(double *) * N);
+        for (int i = 0; i < N; i++) gamma_t[i] = (double *)malloc(sizeof(double) * T);
+    }
 
     // // di-gamma: NxNxT
-    double ***di_gamma = (double ***)malloc(sizeof(double **) * N);
-    for (int i = 0; i < N; i++) {
-        di_gamma[i] = (double **)malloc(sizeof(double *) * N);
-        for (int j = 0; j < N; j++) di_gamma[i][j] = (double *)malloc(sizeof(double) * T);
+    if (!di_gamma) {
+        di_gamma = (double ***)malloc(sizeof(double **) * N);
+        for (int i = 0; i < N; i++) {
+            di_gamma[i] = (double **)malloc(sizeof(double *) * N);
+            for (int j = 0; j < N; j++) di_gamma[i][j] = (double *)malloc(sizeof(double) * T);
+        }
     }
 
     for (int t = 0; t < T - 1; t++) {
@@ -424,11 +435,11 @@ double ***compute_gamma(int N, int T, int *O, double **alpha, double **beta, dou
         }
 
         for (int i = 0; i < N; i++) {
-            (*gamma)[i][t] = 0.0;
+            gamma_t[i][t] = 0.0;
             for (int j = 0; j < N; j++) {
                 int q = O[t + 1];
                 di_gamma[i][j][t] = (alpha[i][t] * A[i][j] * B[j][q] * beta[j][t + 1]) / denom;
-                (*gamma)[i][t] += di_gamma[i][j][t];
+                gamma_t[i][t] += di_gamma[i][j][t];
             }
         }
     }
@@ -440,15 +451,13 @@ double ***compute_gamma(int N, int T, int *O, double **alpha, double **beta, dou
     }
 
     for (int i = 0; i < N; i++) {
-        (*gamma)[i][T - 1] = alpha[i][T - 1] / denom;
+        gamma_t[i][T - 1] = alpha[i][T - 1] / denom;
     }
-
-    return di_gamma;
 }
 
-void re_estimate(int N, int M, int T, int *O, double **gamma, double ***di_gamma) {
+void re_estimate(int N, int M, int T, int *O) {
     // re-estimate pi
-    for (int i = 0; i < N; i++) pi[i] = gamma[i][0];
+    for (int i = 0; i < N; i++) pi[i] = gamma_t[i][0];
 
     // re-estimate A
     for (int i = 0; i < N; i++) {
@@ -457,7 +466,7 @@ void re_estimate(int N, int M, int T, int *O, double **gamma, double ***di_gamma
             double denom = 0.0;
             for (int t = 0; t < T - 1; t++) {
                 numer += di_gamma[i][j][t];
-                denom += gamma[i][t];
+                denom += gamma_t[i][t];
             }
             A[i][j] = numer / denom;
         }
@@ -469,8 +478,8 @@ void re_estimate(int N, int M, int T, int *O, double **gamma, double ***di_gamma
             double numer = 0.0;
             double denom = 0.0;
             for (int t = 0; t < T; t++) {
-                if (O[t] == j) numer += gamma[i][t];
-                denom += gamma[i][t];
+                if (O[t] == j) numer += gamma_t[i][t];
+                denom += gamma_t[i][t];
             }
             B[i][j] = numer / denom;
         }
