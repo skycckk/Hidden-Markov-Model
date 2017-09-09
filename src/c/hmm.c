@@ -428,10 +428,14 @@ void compute_gamma(int N, int T, int *O) {
     for (int t = 0; t < T - 1; t++) {
         double denom  = 0.0;
         for (int i = 0; i < N; i++) {
+#if 1 // they are should be equalvent. For performance concern, use faster one
+            denom += alpha[i][T - 1];
+#else            
             for (int j = 0; j < N; j++) {
                 int q = O[t + 1];
                 denom += (alpha[i][t] * A[i][j] * B[j][q] * beta[j][t + 1]);
             }
+#endif            
         }
 
         for (int i = 0; i < N; i++) {
