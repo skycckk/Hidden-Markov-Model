@@ -7,6 +7,7 @@
 #include "time.h"
 #include "math.h"
 #include <ctype.h>
+#include <string.h>
 
 #include "mycipher.h"
 
@@ -44,24 +45,25 @@ void dump_model(int M, int N) {
     printf("\n--------A-Matrix--------\n");
     for (int i = 0; i < N; i++) {
         for (int j = 0; j < N; j++) {
-            printf("%f ", A[i][j]);
+            printf("%.4f ", A[i][j]);
         }
         printf("\n");
     }
 
     printf("\n--------B-Matrix--------\n");
     for (int i = 0; i < M; i++) {
-        if (i < M - 1) printf("    %c | ", i + 'a');
-        else printf("space | ");
+        // if (i < M - 1) printf("    %c | ", i + 'a');
+        // else printf("space | ");
+        printf("    %c | ", i + 'a');
         for (int j = 0; j < N; j++) {
-            printf("%f ", B[j][i]);
+            printf("%.4f ", B[j][i]);
         }
         printf("\n");
     }
 
     printf("\n--------pi-Matrix--------\n");
     for (int i = 0; i < N; i++) {
-        printf("%f ", pi[i]);
+        printf("%.4f ", pi[i]);
     }
     printf("\n");
 }
@@ -111,10 +113,18 @@ void init_brown_corpus(int T) {
 void init_ss_cipher_corpus(int T) {
     int cipher_length = 0;
     char *cipher = gen_cipher_with_shifting(&cipher_length);
+    
     if (T != cipher_length) {fprintf(stderr, "ERROR: Wrong size of T %d.\n", cipher_length); exit(0);};
     O = (int *)malloc(sizeof(int) * T);
+    
     for (int i = 0; i < cipher_length; i++) O[i] = cipher[i] - 'a';
-    free(cipher);        
+    free(cipher);
+
+    double **digraph = init_english_digraph();
+    for (int i = 0; i < 26; i++) {
+        for (int j = 0; j < 26; j++) A[i][j] = digraph[i][j];
+    }
+    free(digraph);
 }
 
 double get_all_states_prob_sum(int N, int T, int *O, int i, int t, double prev_prob) {
@@ -214,7 +224,6 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "[Usage]: M N T MaxIteration seed(optional)\n");
         exit(1);
     }
-
     const int M = atoi(argv[1]);
     const int N = atoi(argv[2]);
     const int T = atoi(argv[3]);
@@ -222,22 +231,31 @@ int main(int argc, char *argv[]) {
     g_random_seed = time(NULL);
     if (argc > 5) {
         g_random_seed = atoi(argv[5]);
-    }
+    }    
+
+    float max_score = 0.f;
 
     init_model(M, N);
-    
-    // init_ss_cipher_corpus(T);
+
+    init_ss_cipher_corpus(T);
     // Config: M = 26, N = 26, T = 1000
 
     // init_simple_corpus(T);
-    // Config: M = 3, N = 2, T = 4
+    // // Config: M = 3, N = 2, T = 4
 
-    init_brown_corpus(T);
-    // Config: M = 27, N = 2~, T = 50000, max_iter = 500
+    // init_brown_corpus(T);
+    // // Config: M = 27, N = 2~, T = 50000, max_iter = 500
 
     hmm_train(M, N, T, O, max_iter);
-    free_global_memory(N);
 
+    extract_putative_key(B);
+    float score = score_cipher(T);
+    printf("score: %f\n", score);
+    // printf("Fraction of putative key: %f and max score: %f\n", score, max_score);
+    // if (score > max_score) max_score = score;
+
+    // printf("MAX SCORE: %f\n", max_score);
+    free_global_memory(N);
     return 0;
 }
 
@@ -268,7 +286,7 @@ void hmm_train(int M, int N, int T, int* O, int max_iter) {
         old_prob = new_prob;
         iteration++;
 
-        if ((iteration % (int)(max_iter / 10.f)) == 0) {
+        if (max_iter > 10 && (iteration % (int)(max_iter / 10.f)) == 0) {
             printf("----------------\n");
             printf("iter: %d(%.0f%%), prob: %f\n", iteration, iteration * 100.f / (float)max_iter, new_prob);
         }
@@ -295,7 +313,7 @@ void init_model(int M, int N) {
     for (int i = 0; i < N; i++) {
         double sum = 0.0;
         for (int j = 0; j < N - 1; j++) {
-            float r = (rand() % 100) / 100000.f;
+            float r = (rand() % 100) / 10000.f;
             if (j % 2 == 0) A[i][j] = (1.0 / N) - r;
             else A[i][j] = (1.0 / N) + r;
             sum += A[i][j];
@@ -304,14 +322,14 @@ void init_model(int M, int N) {
 
         sum = 0.0;
         for (int j = 0; j < M - 1; j++) {
-            float r = (rand() % 100) / 100000.f;
+            float r = (rand() % 100) / 10000.f;
             if (j % 2 == 0) B[i][j] = (1.0 / M) - r;
             else B[i][j] = (1.0 / M) + r;
             sum += B[i][j];
         }
         B[i][M - 1] = 1.0 - sum;
 
-        float r = (rand() % 100) / 100000.f;
+        float r = (rand() % 100) / 10000.f;
         if (i % 2 == 0) pi[i] = (1.0 / N) - r;
         else pi[i] = (1.0 / N) - r;
     }
@@ -430,12 +448,12 @@ void compute_gamma(int N, int T, int *O) {
         for (int i = 0; i < N; i++) {
 #if 1 // they are should be equalvent. For performance concern, use faster one
             denom += alpha[i][T - 1];
-#else            
+#else
             for (int j = 0; j < N; j++) {
                 int q = O[t + 1];
                 denom += (alpha[i][t] * A[i][j] * B[j][q] * beta[j][t + 1]);
             }
-#endif            
+#endif
         }
 
         for (int i = 0; i < N; i++) {
@@ -463,18 +481,18 @@ void re_estimate(int N, int M, int T, int *O) {
     // re-estimate pi
     for (int i = 0; i < N; i++) pi[i] = gamma_t[i][0];
 
-    // re-estimate A
-    for (int i = 0; i < N; i++) {
-        for (int j = 0; j < N; j++) {
-            double numer = 0.0;
-            double denom = 0.0;
-            for (int t = 0; t < T - 1; t++) {
-                numer += di_gamma[i][j][t];
-                denom += gamma_t[i][t];
-            }
-            A[i][j] = numer / denom;
-        }
-    }
+    // // re-estimate A
+    // for (int i = 0; i < N; i++) {
+    //     for (int j = 0; j < N; j++) {
+    //         double numer = 0.0;
+    //         double denom = 0.0;
+    //         for (int t = 0; t < T - 1; t++) {
+    //             numer += di_gamma[i][j][t];
+    //             denom += gamma_t[i][t];
+    //         }
+    //         A[i][j] = numer / denom;
+    //     }
+    // }
 
     // re-estimate B
     for (int i = 0; i < N; i++) {
