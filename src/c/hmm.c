@@ -217,21 +217,19 @@ void free_global_memory(int N) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc < 5) {
-        fprintf(stderr, "[Usage]: M N T MaxIteration seed(optional)\n");
+    if (argc < 6) {
+        fprintf(stderr, "[Usage]: M N T maxIteration numModels seed(optional)\n");
         exit(1);
     }
     const int M = atoi(argv[1]);
     const int N = atoi(argv[2]);
     const int T = atoi(argv[3]);
     const int max_iter = atoi(argv[4]);
+    const int num_models = atoi(argv[5]);
     g_random_seed = time(NULL);
-    if (argc > 5) {
-        g_random_seed = atoi(argv[5]);
-    }    
+    if (argc > 6) g_random_seed = atoi(argv[6]);
 
     float max_score = 0.f;
-    int num_models = 1000;
     init_model(M, N, 1);
     init_ss_cipher_corpus(T);
     for (int m = 0; m < num_models; m++) {
