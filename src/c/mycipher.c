@@ -11,14 +11,13 @@ char *g_plaintext = NULL;
 char *g_ciphertext = NULL;
 char g_putative_key[26] = {0};
 
-char* gen_cipher_with_shifting(int *cipher_length) {
+char* gen_cipher_with_shifting(int cipher_length) {
     char * line = NULL;
     size_t len = 0;
     FILE *fp = fopen("./dataset/brown.txt", "r");
     if (fp == NULL) {fprintf(stderr, "ERROR: Couldn't open file.\n"); exit(1);};
 
-    const int T = 1000;
-    *cipher_length = T;
+    int T = cipher_length;
     ssize_t read;
     int count = 0;
 

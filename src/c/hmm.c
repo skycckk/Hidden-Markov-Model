@@ -111,12 +111,9 @@ void init_brown_corpus(int T) {
 }
 
 void init_ss_cipher_corpus(int T) {
-    int cipher_length = 0;
-    char *cipher = gen_cipher_with_shifting(&cipher_length);
+    char *cipher = gen_cipher_with_shifting(T);
     
-    if (T != cipher_length) {fprintf(stderr, "ERROR: Wrong size of T %d.\n", cipher_length); exit(0);};
     O = (int *)malloc(sizeof(int) * T);
-    
     for (int i = 0; i < cipher_length; i++) O[i] = cipher[i] - 'a';
     free(cipher);
 
