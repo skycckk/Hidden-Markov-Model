@@ -12,7 +12,7 @@
 #include "mycipher.h"
 
 void hmm_train(int M, int N, int T, int *O, int max_iter);
-void init_model(int M, int N);
+void init_model(int M, int N, int update_A);
 void dump_model(int M, int N);
 void alpha_pass(int N, int T, int *O);
 void alpha_pass_no_scale(int N, int T, int *O);
@@ -231,10 +231,18 @@ int main(int argc, char *argv[]) {
     }    
 
     float max_score = 0.f;
-
-    init_model(M, N);
-
+    int num_models = 1000;
+    init_model(M, N, 1);
     init_ss_cipher_corpus(T);
+    for (int m = 0; m < num_models; m++) {
+        hmm_train(M, N, T, O, max_iter);
+        extract_putative_key(B);
+        float score = score_cipher(T);
+        init_model(M, N, 0);
+        g_random_seed = rand() % (1000000);
+    }
+
+    // init_ss_cipher_corpus(T);
     // Config: M = 26, N = 26, T = 1000
 
     // init_simple_corpus(T);
@@ -243,11 +251,11 @@ int main(int argc, char *argv[]) {
     // init_brown_corpus(T);
     // // Config: M = 27, N = 2~, T = 50000, max_iter = 500
 
-    hmm_train(M, N, T, O, max_iter);
+    // hmm_train(M, N, T, O, max_iter);
 
-    extract_putative_key(B);
-    float score = score_cipher(T);
-    printf("score: %f\n", score);
+    
+    // float score = score_cipher(T);
+    // printf("score: %f\n", score);
     // printf("Fraction of putative key: %f and max score: %f\n", score, max_score);
     // if (score > max_score) max_score = score;
 
@@ -291,7 +299,7 @@ void hmm_train(int M, int N, int T, int* O, int max_iter) {
     dump_model(M, N);
 }
 
-void init_model(int M, int N) {
+void init_model(int M, int N, int update_A) {
     // A: NxN
     // B: NxM
     // pi: 1xN
@@ -319,10 +327,12 @@ void init_model(int M, int N) {
     }
     for (int i = 0; i < N; i++) {
         double sum = 0.0;
-        for (int j = 0; j < N - 1; j++) {
-            float r = (rand() % 1000) / 1000.f;
-            A[i][j] = min_cell[0] + cell_range[0] * r;
-            sum += A[i][j];
+        if (update_A) {
+            for (int j = 0; j < N - 1; j++) {
+                float r = (rand() % 1000) / 1000.f;
+                A[i][j] = min_cell[0] + cell_range[0] * r;
+                sum += A[i][j];
+            }
         }
         A[i][N - 1] = 1.0 - sum;
 
