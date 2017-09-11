@@ -310,28 +310,35 @@ void init_model(int M, int N) {
 
     // initialize value (nearly uniform distribution)
     srand(g_random_seed);
+    const float precision = 1.f / 10.f;
+    float cell[2] = {1.0 / N, 1.0 / M};
+    float max_cell[2] = {0.f};
+    float min_cell[2] = {0.f};
+    float cell_range[2] = {0.f};
+    for (int i = 0; i < 2; i++) {
+        max_cell[i] = cell[i] + cell[i] * precision;
+        min_cell[i] = cell[i] - cell[i] * precision;
+        cell_range[i] = max_cell[i] - min_cell[i];
+    }
     for (int i = 0; i < N; i++) {
         double sum = 0.0;
         for (int j = 0; j < N - 1; j++) {
-            float r = (rand() % 100) / 10000.f;
-            if (j % 2 == 0) A[i][j] = (1.0 / N) - r;
-            else A[i][j] = (1.0 / N) + r;
+            float r = (rand() % 1000) / 1000.f;
+            A[i][j] = min_cell[0] + cell_range[0] * r;
             sum += A[i][j];
         }
         A[i][N - 1] = 1.0 - sum;
 
         sum = 0.0;
         for (int j = 0; j < M - 1; j++) {
-            float r = (rand() % 100) / 10000.f;
-            if (j % 2 == 0) B[i][j] = (1.0 / M) - r;
-            else B[i][j] = (1.0 / M) + r;
+            float r = (rand() % 1000) / 1000.f;
+            B[i][j] = min_cell[1] + cell_range[1] * r;
             sum += B[i][j];
         }
         B[i][M - 1] = 1.0 - sum;
 
-        float r = (rand() % 100) / 10000.f;
-        if (i % 2 == 0) pi[i] = (1.0 / N) - r;
-        else pi[i] = (1.0 / N) - r;
+        float r = (rand() % 1000) / 1000.f;
+        pi[i] = min_cell[0] + cell_range[0] * r;
     }
     pi[N - 1] = 1.0;
     for (int i = 0; i < N - 1; i++) pi[N - 1] -= pi[i];
