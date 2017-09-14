@@ -1,3 +1,7 @@
+// Some cryptographic utilities
+// Author: WeiChung Huang
+// Last Modified on 9/13/2017
+
 #include "stdio.h"
 #include "stdlib.h"
 #include "math.h"
@@ -9,12 +13,18 @@ const int key = 1;
 
 char *g_plaintext = NULL;
 char *g_ciphertext = NULL;
-char g_putative_key[26] = {0};
+char *g_putative_key = NULL;
+
+void dealloc_cipher() {
+    if (g_plaintext) {free(g_plaintext); g_plaintext = NULL;}
+    if (g_ciphertext) {free(g_ciphertext); g_ciphertext = NULL;}
+    if (g_putative_key) {free(g_putative_key); g_putative_key = NULL;}
+}
 
 char* gen_cipher_with_shifting(int cipher_length) {
     char * line = NULL;
     size_t len = 0;
-    FILE *fp = fopen("./dataset/brown.txt", "r");
+    FILE *fp = fopen("./dataset/brown_copy.txt", "r");
     if (fp == NULL) {fprintf(stderr, "ERROR: Couldn't open file.\n"); exit(1);};
 
     int T = cipher_length;
@@ -30,8 +40,6 @@ char* gen_cipher_with_shifting(int cipher_length) {
         for (int i = 0; i < len; i++) {
             char c = line[i];
             if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
-                // if (c != ' ') O[count] = tolower(c) - 'a';
-                // else O[count] = 26;
                 g_plaintext[count] = tolower(c);
                 char lo_c = tolower(c) - 'a';
                 lo_c = ((lo_c + key) % 26) + 'a';
@@ -44,6 +52,50 @@ char* gen_cipher_with_shifting(int cipher_length) {
         if (count >= T) break;
     }
     
+    return cipher;
+}
+
+int* read_zodiac408(const char* file) {
+    char * line = NULL;
+    size_t len = 0;
+    FILE *fp = fopen(file, "r");
+    if (fp == NULL) {fprintf(stderr, "ERROR: Couldn't open file. (%s)\n", file); exit(1);};
+
+    const int T = 408;
+    ssize_t read;
+    int count = 0;
+    char delimit[] = " \t\r\n\v\f";
+    int *cipher = (int *)malloc(sizeof(int) * T);
+
+    if (g_ciphertext) {free(g_ciphertext); g_ciphertext = NULL;}
+    g_ciphertext = (char *)malloc(sizeof(char) * T);
+    if (g_plaintext) {free(g_plaintext); g_plaintext = NULL;}
+    g_plaintext = (char *)malloc(sizeof(char) * T);
+    while ((read = getline(&line, &len, fp)) != -1) {
+        char *token = strtok(line, delimit);
+        while (token != NULL) {
+            cipher[count] = atoi(token) - 1;
+            g_ciphertext[count] = cipher[count];
+            count++;
+            token = strtok(NULL, delimit);
+        }
+    }
+    fclose(fp);
+
+    // read the plaintext as well
+    fp = fopen("./dataset/zodiac408_plaintext.txt", "r");
+    if (fp == NULL) {fprintf(stderr, "ERROR: Couldn't open file. (zodiac408_plain)\n"); exit(1);};
+    count = 0;
+    while ((read = getline(&line, &len, fp)) != -1) {
+        char *token = strtok(line, delimit);
+        while (token != NULL) {
+            g_plaintext[count] = token[0];
+            count++;
+            token = strtok(NULL, delimit);
+        }
+    }
+    fclose(fp);
+
     return cipher;
 }
 
@@ -85,12 +137,13 @@ double** init_english_digraph() {
     return char_bigram;
 }
 
-void extract_putative_key(double **B) {
+void extract_putative_key(double **B, int N, int M) {
     if (!B) return;
-    for (int j = 0; j < 26; j++) {
+    if (!g_putative_key) g_putative_key = (char *)malloc(sizeof(char) * M);
+    for (int j = 0; j < M; j++) {
         double max_prob = 0.0;
         int hidden_letter = 0;
-        for (int i = 0; i < 26; i++) {
+        for (int i = 0; i < N; i++) {
             if (B[i][j] >= max_prob) {
                 max_prob = B[i][j];
                 hidden_letter = i;
@@ -98,25 +151,16 @@ void extract_putative_key(double **B) {
         }
         // the mapping would be j -> hidden_letter with max prob.
         g_putative_key[j] = hidden_letter + 'a';
-        printf("key: %c -> %c\n", j + 'a', hidden_letter + 'a');
     }
 }
 
 float score_cipher(int text_len) {
-    // int count = 0;
-    // for (int i = 0; i < text_len; i++) {
-    //     char observor = g_ciphertext[i];
-    //     char decrypted = g_putative_key[observor - 'a'];
-    //     if (decrypted == g_plaintext[i]) count++;
-    // }
-
-    free(g_plaintext); g_plaintext = NULL;
-    free(g_ciphertext); g_ciphertext = NULL;
-
     int count = 0;
-    for (int i = 0; i < 26; i++) {
-        if ((g_putative_key[i] - 'a') == ((i - key) % 26)) count++;
+    for (int i = 0; i < text_len; i++) {
+        //if ((g_putative_key[i] - 'a') == ((i - key) % 26)) count++;
+        int idx = g_ciphertext[i];
+        if (g_putative_key[idx] == g_plaintext[i]) count++;
     }
 
-    return count / 26.0;
+    return count / (float)text_len;
 }

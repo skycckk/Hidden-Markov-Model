@@ -1,6 +1,6 @@
 // Hidden Markov Model
 // Author: WeiChung Huang
-// Last Modified on 9/6/2017
+// Last Modified on 9/13/2017
 
 #include "stdio.h"
 #include "stdlib.h"
@@ -11,14 +11,14 @@
 
 #include "mycipher.h"
 
-void hmm_train(int M, int N, int T, int *O, int max_iter);
+double hmm_train(int M, int N, int T, int *O, int max_iter, int mode);
 void init_model(int M, int N, int update_A);
 void dump_model(int M, int N);
 void alpha_pass(int N, int T, int *O);
 void alpha_pass_no_scale(int N, int T, int *O);
 void beta_pass(int N, int T, int *O);
 void compute_gamma(int N, int T, int *O);
-void re_estimate(int N, int M, int T, int *O);
+void re_estimate(int N, int M, int T, int *O, int update_A);
 double compute_prob(int T);
 void init_brown_corpus(int T);
 void init_simple_corpus(int T);
@@ -90,7 +90,7 @@ void init_brown_corpus(int T) {
 
     char * line = NULL;
     size_t len = 0;
-    FILE *fp = fopen("../dataset/brown.txt", "r");
+    FILE *fp = fopen("./dataset/brown.txt", "r");
     if (fp == NULL) {fprintf(stderr, "ERROR: Couldn't open file (brown.txt).\n"); exit(1);};
 
     ssize_t read;
@@ -112,9 +112,24 @@ void init_brown_corpus(int T) {
 
 void init_ss_cipher_corpus(int T) {
     char *cipher = gen_cipher_with_shifting(T);
-    
+
     O = (int *)malloc(sizeof(int) * T);
-    for (int i = 0; i < cipher_length; i++) O[i] = cipher[i] - 'a';
+    for (int i = 0; i < T; i++) O[i] = cipher[i] - 'a';
+    free(cipher);
+
+    double **digraph = init_english_digraph();
+    for (int i = 0; i < 26; i++) {
+        for (int j = 0; j < 26; j++) A[i][j] = digraph[i][j];
+    }
+    free(digraph);
+}
+
+void init_zodiac_cipher_corpus(int T) {
+    if (T != 408) {fprintf(stderr, "Error: T is not 408 for zodiac.\n"); exit(1);}
+    int *cipher = read_zodiac408("./dataset/zodiac408.txt");
+
+    O = (int *)malloc(sizeof(int) * T);
+    for (int i = 0; i < T; i++) O[i] = cipher[i];
     free(cipher);
 
     double **digraph = init_english_digraph();
@@ -217,53 +232,58 @@ void free_global_memory(int N) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc < 6) {
-        fprintf(stderr, "[Usage]: M N T maxIteration numModels seed(optional)\n");
+    if (argc < 7) {
+        fprintf(stderr, " \
+[Usage]: ./hmm M N T maxIteration numModels mode seed(optional)\n\n \
+Mode: 1 simple test case\n \
+Mode: 2 simple substitution\n \
+Mode: 3 zodiac408\n \
+Mode: 4 brow corpus analysis\n\n \
+Example: (simple_substitution) -> ./hmm 26 26 1000 200 1 2 1\n\n \
+Example: (zodiac408) -> ./hmm 53 26 408 200 10000 3 1\n\n \
+Example: (brown corpus) -> ./hmm 27 2 50000 500 1 4 1\n\n");
         exit(1);
     }
+
     const int M = atoi(argv[1]);
     const int N = atoi(argv[2]);
     const int T = atoi(argv[3]);
     const int max_iter = atoi(argv[4]);
     const int num_models = atoi(argv[5]);
+    const int mode = atoi(argv[6]);
     g_random_seed = time(NULL);
-    if (argc > 6) g_random_seed = atoi(argv[6]);
+    if (argc > 7) g_random_seed = atoi(argv[7]);
+
+    init_model(M, N, 1);
 
     float max_score = 0.f;
-    init_model(M, N, 1);
-    init_ss_cipher_corpus(T);
+    if (mode == 2) init_ss_cipher_corpus(T);
+    else if (mode == 3) init_zodiac_cipher_corpus(T);
+    else if (mode == 4) init_brown_corpus(T);
+    else if (mode == 1) init_simple_corpus(T);
+    else {fprintf(stderr, "ERROR: Wrong mode is selected\n"); exit(1);}
+
     for (int m = 0; m < num_models; m++) {
-        hmm_train(M, N, T, O, max_iter);
-        extract_putative_key(B);
-        float score = score_cipher(T);
-        init_model(M, N, 0);
-        g_random_seed = rand() % (1000000);
+        double log_prob = hmm_train(M, N, T, O, max_iter, mode);
+        if (mode == 2 || mode == 3) {
+            extract_putative_key(B, N, M);
+            float score = score_cipher(T);
+            if (score > max_score) max_score = score;
+            printf("Iteration: %d, Max score: %f, Current score: %f, Log prob: %f\n", m + 1, max_score, score, log_prob);
+            init_model(M, N, 0);
+        } else {
+            printf("LogProb(O | lambda0): %f\n", log_prob);
+        }
+        g_random_seed = rand();
     }
+    dump_model(M, N);
 
-    // init_ss_cipher_corpus(T);
-    // Config: M = 26, N = 26, T = 1000
-
-    // init_simple_corpus(T);
-    // // Config: M = 3, N = 2, T = 4
-
-    // init_brown_corpus(T);
-    // // Config: M = 27, N = 2~, T = 50000, max_iter = 500
-
-    // hmm_train(M, N, T, O, max_iter);
-
-    
-    // float score = score_cipher(T);
-    // printf("score: %f\n", score);
-    // printf("Fraction of putative key: %f and max score: %f\n", score, max_score);
-    // if (score > max_score) max_score = score;
-
-    // printf("MAX SCORE: %f\n", max_score);
     free_global_memory(N);
+    dealloc_cipher();
     return 0;
 }
 
-void hmm_train(int M, int N, int T, int* O, int max_iter) {
-    printf("Start HMM Training...\n");
+double hmm_train(int M, int N, int T, int* O, int max_iter, int mode) {
     // check input matrix
     for (int i = 0; i < N; i++) {
         double sum = 0.0;
@@ -275,26 +295,24 @@ void hmm_train(int M, int N, int T, int* O, int max_iter) {
         if (fabs(sum - 1.0) > 10e-7) { fprintf(stderr, "ERROR: A matrix is not stochastic (%f)\n", sum); exit(1); };
     }
 
-    dump_model(M, N);
-
     double old_prob = -(1.0 / 0.0); // to make it -INF
     double new_prob = 1.0;
     int iteration = 0;
     while (iteration < max_iter && new_prob > old_prob) {
+        if (iteration > 0) old_prob = new_prob;
         alpha_pass(N, T, O);
         beta_pass(N, T, O);
         compute_gamma(N, T, O);
-        re_estimate(N, M, T, O);
-        double new_prob = compute_prob(T);        
-        old_prob = new_prob;
+        re_estimate(N, M, T, O, (mode == 2 || mode == 3) ? 0 : 1);
+        new_prob = compute_prob(T);        
         iteration++;
 
-        if (max_iter > 10 && (iteration % (int)(max_iter / 10.f)) == 0) {
-            printf("----------------\n");
-            printf("iter: %d(%.0f%%), prob: %f\n", iteration, iteration * 100.f / (float)max_iter, new_prob);
-        }
+        // if (max_iter > 10 && (iteration % (int)(max_iter / 10.f)) == 0) {
+        //     printf("----------------\n");
+        //     printf("iter: %d(%.0f%%), prob: %f\n", iteration, iteration * 100.f / (float)max_iter, new_prob);
+        // }
     }
-    dump_model(M, N);
+    return new_prob;
 }
 
 void init_model(int M, int N, int update_A) {
@@ -303,13 +321,17 @@ void init_model(int M, int N, int update_A) {
     // pi: 1xN
     // Default is initializing to a nearly uniform distribution
     // buffer allocation
-    A = (double **)malloc(sizeof(double*) * N);
-    for (int i = 0; i < N; i++) A[i] = (double *)malloc(sizeof(double) * N);
+    if (!A) {
+        A = (double **)malloc(sizeof(double*) * N);
+        for (int i = 0; i < N; i++) A[i] = (double *)malloc(sizeof(double) * N);
+    }
 
-    B = (double **)malloc(sizeof(double *) * N);
-    for (int i = 0; i < N; i++) B[i] = (double *)malloc(sizeof(double) * M);
-
-    pi = (double *)malloc(sizeof(double *) * N);
+    if (!B) {
+        B = (double **)malloc(sizeof(double *) * N);
+        for (int i = 0; i < N; i++) B[i] = (double *)malloc(sizeof(double) * M);
+    }
+    
+    if (!pi) pi = (double *)malloc(sizeof(double *) * N);
 
     // initialize value (nearly uniform distribution)
     srand(g_random_seed);
@@ -331,8 +353,8 @@ void init_model(int M, int N, int update_A) {
                 A[i][j] = min_cell[0] + cell_range[0] * r;
                 sum += A[i][j];
             }
+            A[i][N - 1] = 1.0 - sum;            
         }
-        A[i][N - 1] = 1.0 - sum;
 
         sum = 0.0;
         for (int j = 0; j < M - 1; j++) {
@@ -489,22 +511,24 @@ void compute_gamma(int N, int T, int *O) {
     }
 }
 
-void re_estimate(int N, int M, int T, int *O) {
+void re_estimate(int N, int M, int T, int *O, int update_A) {
     // re-estimate pi
     for (int i = 0; i < N; i++) pi[i] = gamma_t[i][0];
 
-    // // re-estimate A
-    // for (int i = 0; i < N; i++) {
-    //     for (int j = 0; j < N; j++) {
-    //         double numer = 0.0;
-    //         double denom = 0.0;
-    //         for (int t = 0; t < T - 1; t++) {
-    //             numer += di_gamma[i][j][t];
-    //             denom += gamma_t[i][t];
-    //         }
-    //         A[i][j] = numer / denom;
-    //     }
-    // }
+    if (update_A) {
+        // re-estimate A
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < N; j++) {
+                double numer = 0.0;
+                double denom = 0.0;
+                for (int t = 0; t < T - 1; t++) {
+                    numer += di_gamma[i][j][t];
+                    denom += gamma_t[i][t];
+                }
+                A[i][j] = numer / denom;
+            }
+        }
+    }
 
     // re-estimate B
     for (int i = 0; i < N; i++) {
