@@ -1,2 +1,2 @@
 # Hidden-Markov-Model
-Short practice of HMM
+# Principal Component Analysis (PCA)
