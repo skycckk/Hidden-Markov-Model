@@ -19,7 +19,7 @@ def _distance(a, b):
     return np.linalg.norm(a - b)
 
 
-def labeling(data, centroids, labels):
+def labeling(data, centroids, labels, use_prob=False):
     """
     Label each sample with its nearest centroids.
     The label starts from 0 to k - 1
@@ -29,19 +29,31 @@ def labeling(data, centroids, labels):
             K-by-M ndarray where K is the number of centroids
     :param labels: ndarray
             1D ndarray where length is same as number of samples
+    :param use_prob: bool (optional, False)
+            Compute new centroid by using distance probability.
     :return:
     """
+    K = centroids.shape[0]
     for i in range(data.shape[0]):
         sample = data[i, :]
         # every sample
-        min_dist = np.finfo(np.float32).max
         label = 0
-        for k in range(centroids.shape[0]):
-            centroid = centroids[k, :]
-            dist = _distance(sample, centroid)
-            if dist < min_dist:
-                min_dist = dist
-                label = k
+        if use_prob:
+            max_prob = np.finfo(np.float32).min
+            dist_sum = sum([_distance(sample, centroids[k]) for k in range(K)])
+            for k in range(K):
+                prob_i = 1 / (K - 1)
+                prob_i = prob_i * (1 - _distance(sample, centroids[k]) / dist_sum)
+                if prob_i > max_prob:
+                    max_prob = prob_i
+                    label = k
+        else:
+            min_dist = np.finfo(np.float32).max
+            for k in range(K):
+                dist = _distance(sample, centroids[k])
+                if dist < min_dist:
+                    min_dist = dist
+                    label = k
         labels[i] = label
 
 
