@@ -39,11 +39,6 @@ def e_step(data, theta, tao, n_clusters, n_samples):
         for j in range(n_clusters):
             p[j][i] = tao[j] * prob_func(x, theta[j], 10) / bayes_sum
 
-    # dump each probability p
-    for i in range(n_samples):
-        for j in range(n_clusters):
-            print(p[j][i])
-
     return p
 
 
@@ -74,7 +69,6 @@ def test():
     while iter <= max_iter and dist > stopping_threshold:
         p = e_step(x, theta, tao, n_clusters, n_samples)
         mu = m_step(x, p, tao, n_clusters, n_samples)
-        print(theta)
         old_theta = theta.copy()
         for j in range(n_clusters):
             theta[j] = mu[j] / 10
