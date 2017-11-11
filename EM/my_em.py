@@ -6,17 +6,19 @@ __copyright__ = "Copyright 2017"
 __version__ = "1.0.0"
 
 
-def prob_func(x, theta):
+def prob_func(x, theta, n):
     """
     Binomial Distribution
     :param x: int
             The outcome value
     :param theta: float
             The probability at desired Head or Tail
+    :param n: int
+            Number of trials
     :return: float
             The probability of binomial
     """
-    n, k = 10, x
+    k = x
     a = factorial(n)
     b = factorial(k)
     c = factorial(n - k)
@@ -28,21 +30,21 @@ def prob_func(x, theta):
 
 def e_step(data, theta, tao, n_clusters, n_samples):
     p = np.zeros([n_clusters, n_samples])
-
     for i in range(n_samples):
         bayes_sum = 0
         x = data[i]
         for j in range(n_clusters):
-            bayes_sum += tao[j] * prob_func(x, theta[j])
+            bayes_sum += tao[j] * prob_func(x, theta[j], 10)
 
         for j in range(n_clusters):
-            p[j][i] = tao[j] * prob_func(x, theta[j]) / bayes_sum
+            p[j][i] = tao[j] * prob_func(x, theta[j], 10) / bayes_sum
 
     # dump each probability p
     for i in range(n_samples):
         for j in range(n_clusters):
             print(p[j][i])
 
+    return p
 
 
 def m_step(data, p, tao, n_clusters, n_samples):
@@ -65,7 +67,15 @@ def test():
     theta = np.asarray([0.6, 0.5])
     tao = np.asarray([0.7, 0.3])
 
-    e_step(x, theta, tao, n_clusters, n_samples)
+    iter = 0
+    max_iter = 100
+    while iter < max_iter:
+        p = e_step(x, theta, tao, n_clusters, n_samples)
+        mu = m_step(x, p, tao, n_clusters, n_samples)
+        print(theta)
+        for j in range(n_clusters):
+            theta[j] = mu[j] / 10
+        iter += 1
 
 if __name__ == '__main__':
     test()
