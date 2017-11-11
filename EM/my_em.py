@@ -44,6 +44,20 @@ def e_step(data, theta, tao, n_clusters, n_samples):
             print(p[j][i])
 
 
+
+def m_step(data, p, tao, n_clusters, n_samples):
+    pj_sum = p.sum(axis=1)
+    mu = np.zeros(n_clusters)
+    var = np.zeros(n_clusters)
+    # re-estimate mean and variance
+    for j in range(n_clusters):
+        tao[j] = pj_sum[j] / n_samples
+        mu[j] = (p[j] * data).sum() / pj_sum[j]
+        var[j] = (p[j] * (data - mu[j]) ** 2).sum() / pj_sum[j]
+
+    return mu
+
+
 def test():
     n_clusters = 2
     n_samples = 5
