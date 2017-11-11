@@ -67,15 +67,23 @@ def test():
     theta = np.asarray([0.6, 0.5])
     tao = np.asarray([0.7, 0.3])
 
-    iter = 0
+    iter = 1
     max_iter = 100
-    while iter < max_iter:
+    stopping_threshold = 10e-5
+    dist = stopping_threshold + 1
+    while iter <= max_iter and dist > stopping_threshold:
         p = e_step(x, theta, tao, n_clusters, n_samples)
         mu = m_step(x, p, tao, n_clusters, n_samples)
         print(theta)
+        old_theta = theta.copy()
         for j in range(n_clusters):
             theta[j] = mu[j] / 10
+
         iter += 1
+        print('Iteration:', iter, '/', max_iter)
+        print('old theta', old_theta)
+        print('new theta', theta, '\n')
+        dist = np.linalg.norm(theta - old_theta)
 
 if __name__ == '__main__':
     test()
