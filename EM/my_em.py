@@ -1,5 +1,6 @@
 import numpy as np
 from math import factorial
+import matplotlib.pyplot as plt
 
 __author__ = "Wei-Chung Huang"
 __copyright__ = "Copyright 2017"
@@ -220,6 +221,22 @@ def test2():
         print('S1:\n', s[1])
         print()
         iter += 1
+
+    for xy in old_faithful_data.T:
+        prob1 = bi_gaussian(xy.reshape(2, 1), theta[0])
+        prob2 = bi_gaussian(xy.reshape(2, 1), theta[1])
+        mk = 'o'
+        cl = 'blue'
+        if prob1 > prob2:
+            mk = 's'
+            cl = 'green'
+
+        plt.scatter(xy[0], xy[1], color=cl, marker=mk)
+
+    plt.title('Old Faithful Data with K = 2 (EM)')
+    for centroid in new_mu.T:
+        plt.scatter(centroid[0], centroid[1], color='red')
+    plt.show()
 
 if __name__ == '__main__':
     test()
