@@ -65,9 +65,10 @@ def my_kmeans(data, k):
             N-by-M ndarray where N is the number of samples
     :param k: int
             number of clusters
-    :return: ndarray
-            Output centroids
-            K-by-M ndarray where K is the number of centroids
+    :return: (ndarray, ndarray)
+            Output centroids and labels
+            K-by-M ndarray where K is the number of centroids.
+            1D ndarray where length is same as number of samples
     """
     n_samples = data.shape[0]
     labels = np.zeros(data.shape[0], dtype=np.int8)
@@ -105,7 +106,7 @@ def my_kmeans(data, k):
 
     print('labels\n', labels)
     print('centroids\n', centroids)
-    return centroids
+    return centroids, labels
 
 
 if __name__ == '__main__':
@@ -130,10 +131,18 @@ if __name__ == '__main__':
                          [4.800, 84],
                          [1.750, 47]]
     old_faithful_data = np.asarray(old_faithful_data)
-    clusters = my_kmeans(old_faithful_data, 3)
+    clusters, labels = my_kmeans(old_faithful_data, 3)
 
-    plt.scatter(old_faithful_data[:, 0], old_faithful_data[:, 1])
-    plt.title('Old Faithful Data with K = 2')
+    for i in range(old_faithful_data.shape[0]):
+        xy = old_faithful_data[i]
+        cl, mk = 'blue', 'o'
+        if labels[i] == 2:
+            cl, mk = 'green', 's'
+        elif labels[i] == 0:
+            cl, mk = 'purple', '*'
+        plt.scatter(xy[0], xy[1], color=cl, marker=mk)
+    # plt.scatter(old_faithful_data[:, 0], old_faithful_data[:, 1])
+    plt.title('Old Faithful Data with K = 3')
     for centroid in clusters:
         plt.scatter(centroid[0], centroid[1], color='red')
     plt.show()
