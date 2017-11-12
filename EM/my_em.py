@@ -195,7 +195,7 @@ def test2():
     tao = np.asarray([0.6, 0.4])
 
     iter = 1
-    max_iter = 2
+    max_iter = 100
     while iter <= max_iter:
         p = e_step(x, theta, tao, n_clusters, n_samples)
         new_mu = m_step(x, p, tao, n_clusters, n_samples)
@@ -216,6 +216,8 @@ def test2():
         print('Iteration:', iter, '/', max_iter)
         print('tau:\n', tao)
         print('mu:\n', new_mu)
+        print('S0:\n', s[0])
+        print('S1:\n', s[1])
         print()
         iter += 1
 
