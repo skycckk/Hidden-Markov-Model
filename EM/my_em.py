@@ -187,8 +187,8 @@ def test2():
     n_clusters = 2
     n_samples = 20
     x = old_faithful_data
-    mu = [np.asarray([2.5, 65]).reshape(n_clusters, -1),
-          np.asarray([3.5, 70]).reshape(n_clusters, -1)]
+    mu = [np.asarray([2.5, 65]).reshape(n_dim, -1),
+          np.asarray([3.5, 70]).reshape(n_dim, -1)]
     s = [np.asarray([[1, 5], [5, 100]]),
          np.asarray([[2, 10], [10, 200]])]
     theta = [{'mu': mu[0], 'S': s[0]},
