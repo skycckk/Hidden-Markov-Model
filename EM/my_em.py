@@ -47,34 +47,34 @@ def bi_gaussian(x, theta):
     return term2 / term1
 
 
-def e_step_1d(data, theta, tao, n_clusters, n_samples):
+def e_step_1d(data, theta, tau, n_clusters, n_samples):
     p = np.zeros([n_clusters, n_samples])
     for i in range(n_samples):
         bayes_sum = 0
         x = data[i]
         for j in range(n_clusters):
-            bayes_sum += tao[j] * prob_func(x, theta[j], 10)
+            bayes_sum += tau[j] * prob_func(x, theta[j], 10)
 
         for j in range(n_clusters):
-            p[j][i] = tao[j] * prob_func(x, theta[j], 10) / bayes_sum
+            p[j][i] = tau[j] * prob_func(x, theta[j], 10) / bayes_sum
 
     return p
 
 
-def m_step_1d(data, p, tao, n_clusters, n_samples):
+def m_step_1d(data, p, tau, n_clusters, n_samples):
     pj_sum = p.sum(axis=1)
     mu = np.zeros(n_clusters)
     var = np.zeros(n_clusters)
     # re-estimate mean and variance
     for j in range(n_clusters):
-        tao[j] = pj_sum[j] / n_samples
+        tau[j] = pj_sum[j] / n_samples
         mu[j] = (p[j] * data).sum() / pj_sum[j]
         var[j] = (p[j] * (data - mu[j]) ** 2).sum() / pj_sum[j]
 
     return mu
 
 
-def e_step(data, theta, tao, n_clusters, n_samples):
+def e_step(data, theta, tau, n_clusters, n_samples):
     """
     E-step. (Expectation Steps)
     :param data: ndarray
@@ -83,7 +83,7 @@ def e_step(data, theta, tao, n_clusters, n_samples):
     :param theta: dictionary
             key['mu']: m-by-1 array
             key['S']: m-by-m covariance matrix S
-    :param tao: ndarray
+    :param tau: ndarray
             The probability for each clusters.
             1-by-c array
     :param n_clusters: int
@@ -98,15 +98,15 @@ def e_step(data, theta, tao, n_clusters, n_samples):
         bayes_sum = 0
         x = data[:, [i]]
         for j in range(n_clusters):
-            bayes_sum += tao[j] * bi_gaussian(x, theta[j])
+            bayes_sum += tau[j] * bi_gaussian(x, theta[j])
 
         for j in range(n_clusters):
-            p[j][i] = tao[j] * bi_gaussian(x, theta[j]) / bayes_sum
+            p[j][i] = tau[j] * bi_gaussian(x, theta[j]) / bayes_sum
 
     return p
 
 
-def m_step(data, p, tao, n_clusters, n_samples):
+def m_step(data, p, tau, n_clusters, n_samples):
     """
     M-step. (Maximization Steps)
     :param data: ndarray
@@ -115,7 +115,7 @@ def m_step(data, p, tao, n_clusters, n_samples):
     :param p: ndarray
             Probability from te E-step.
             c-by-n array where c is the no. clusters.
-    :param tao: ndarray
+    :param tau: ndarray
             The probability for each clusters.
             1-by-c array
     :param n_clusters: int
@@ -129,7 +129,7 @@ def m_step(data, p, tao, n_clusters, n_samples):
     n_dim = 2
     mu = np.zeros([n_dim, n_clusters])
     for j in range(n_clusters):
-        tao[j] = pj_sum[j] / n_samples
+        tau[j] = pj_sum[j] / n_samples
         mu[:, j] = p[j].dot(data.T) / pj_sum[j]
 
     return mu
@@ -140,15 +140,15 @@ def test():
     n_samples = 5
     x = np.asarray([8, 5, 9, 4, 7])
     theta = np.asarray([0.6, 0.5])
-    tao = np.asarray([0.7, 0.3])
+    tau = np.asarray([0.7, 0.3])
 
     iter = 1
     max_iter = 100
     stopping_threshold = 10e-5
     dist = stopping_threshold + 1
     while iter <= max_iter and dist > stopping_threshold:
-        p = e_step_1d(x, theta, tao, n_clusters, n_samples)
-        mu = m_step_1d(x, p, tao, n_clusters, n_samples)
+        p = e_step_1d(x, theta, tau, n_clusters, n_samples)
+        mu = m_step_1d(x, p, tau, n_clusters, n_samples)
         old_theta = theta.copy()
         for j in range(n_clusters):
             theta[j] = mu[j] / 10
@@ -193,13 +193,13 @@ def test2():
          np.asarray([[2, 10], [10, 200]])]
     theta = [{'mu': mu[0], 'S': s[0]},
              {'mu': mu[1], 'S': s[1]}]
-    tao = np.asarray([0.6, 0.4])
+    tau = np.asarray([0.6, 0.4])
 
     iter = 1
     max_iter = 100
     while iter <= max_iter:
-        p = e_step(x, theta, tao, n_clusters, n_samples)
-        new_mu = m_step(x, p, tao, n_clusters, n_samples)
+        p = e_step(x, theta, tau, n_clusters, n_samples)
+        new_mu = m_step(x, p, tau, n_clusters, n_samples)
 
         # re-estimate S
         pj_sum = p.sum(axis=1)
@@ -215,7 +215,7 @@ def test2():
                  {'mu': new_mu[:, [1]], 'S': s[1]}]
 
         print('Iteration:', iter, '/', max_iter)
-        print('tau:\n', tao)
+        print('tau:\n', tau)
         print('mu:\n', new_mu)
         print('S0:\n', s[0])
         print('S1:\n', s[1])
